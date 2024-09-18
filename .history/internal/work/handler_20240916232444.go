@@ -2,6 +2,7 @@ package work
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -88,13 +89,12 @@ func (h *handler) UpdateWork(c *gin.Context) {
 }
 
 func (h *handler) DeleteWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-	if err := h.repo.DeleteWork(id); err != nil {
+	if err := h.repo.DeleteWork(uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -7,7 +7,7 @@ type Work struct {
 	Image       string             `bson:"image"`
 	Title       string             `bson:"title"`
 	Description string             `bson:"description"`
-	Gallery     []Gallery          `bson:"gallery"`
+	Gallery     []Gallery          `son:"gallery" gorm:"foreignKey:WorkID;constraint:OnDelete:CASCADE;"`
 }
 
 type Gallery struct {

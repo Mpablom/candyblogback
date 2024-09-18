@@ -2,17 +2,17 @@ package work
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"gorm.io/gorm"
 )
 
 type handler struct {
 	repo *Repository
 }
 
-func RegisterRoutes(r *gin.Engine, db *mongo.Database) {
+func RegisterRoutes(r *gin.Engine, db *gorm.DB) {
 	repo := newRepository(db)
 	h := &handler{repo: repo}
 	r.GET("/", h.HandleRoot)
@@ -35,13 +35,12 @@ func (h *handler) GetAllWorks(c *gin.Context) {
 }
 
 func (h *handler) GetWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-	work, err := h.repo.GetWork(id)
+	work, err := h.repo.GetWork(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -55,46 +54,78 @@ func (h *handler) CreateWork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	work.ID = primitive.NewObjectID()
 	if err := h.repo.CreateWork(&work); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	for i := range work.Gallery {
+		work.Gallery[i].WorkID = work.ID
+		work.Gallery[i].ID = 0
 	}
 
 	c.JSON(http.StatusCreated, work)
 }
 
 func (h *handler) UpdateWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
 
+	// Obtener el work existente
+	existingWork, err := h.repo.GetWork(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Work not found"})
+		return
+	}
+
+	// Obtener los datos del work actualizado desde la solicitud
 	var updatedWork Work
 	if err := c.ShouldBindJSON(&updatedWork); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updatedWork.ID = id
 
-	if err := h.repo.UpdateWork(&updatedWork); err != nil {
+	// Actualizar los campos del work existente
+	existingWork.Image = updatedWork.Image
+	existingWork.Title = updatedWork.Title
+	existingWork.Description = updatedWork.Description
+
+	// Eliminar las galerías existentes
+	if err := h.repo.db.Where("work_id = ?", existingWork.ID).Delete(&Gallery{}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, updatedWork)
+
+	// Crear nuevas galerías
+	var newGalleries []Gallery
+	for _, gallery := range updatedWork.Gallery {
+		gallery.WorkID = existingWork.ID
+		newGalleries = append(newGalleries, gallery)
+	}
+
+	// Guardar el work actualizado en la base de datos
+	if err := h.repo.UpdateWork(existingWork); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.repo.db.Model(&existingWork).Association("Gallery").Find(&existingWork.Gallery); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, existingWork)
 }
 
 func (h *handler) DeleteWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-	if err := h.repo.DeleteWork(id); err != nil {
+	if err := h.repo.DeleteWork(uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

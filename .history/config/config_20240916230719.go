@@ -10,9 +10,8 @@ import (
 )
 
 var client *mongo.Client
-var database *mongo.Database
 
-func ConnectMongoDB() {
+func GetMongoDB() {
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
 
 	var err error
@@ -35,8 +34,4 @@ func ConnectMongoDB() {
 	}
 
 	log.Println("Conexión establecida con MongoDB")
-}
-func GetMongoDB() *mongo.Database {
-	database = client.Database("candyblog")
-	return database
 }

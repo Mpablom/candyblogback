@@ -2,17 +2,17 @@ package work
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"gorm.io/gorm"
 )
 
 type handler struct {
 	repo *Repository
 }
 
-func RegisterRoutes(r *gin.Engine, db *mongo.Database) {
+func RegisterRoutes(r *gin.Engine, db *gorm.DB) {
 	repo := newRepository(db)
 	h := &handler{repo: repo}
 	r.GET("/", h.HandleRoot)
@@ -35,13 +35,12 @@ func (h *handler) GetAllWorks(c *gin.Context) {
 }
 
 func (h *handler) GetWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-	work, err := h.repo.GetWork(id)
+	work, err := h.repo.GetWork(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -55,8 +54,10 @@ func (h *handler) CreateWork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	work.ID = primitive.NewObjectID()
+	for i := range work.Gallery {
+		work.Gallery[i].WorkID = work.ID
+		work.Gallery[i].ID = 0
+	}
 	if err := h.repo.CreateWork(&work); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -66,35 +67,25 @@ func (h *handler) CreateWork(c *gin.Context) {
 }
 
 func (h *handler) UpdateWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
-		return
-	}
-
-	var updatedWork Work
-	if err := c.ShouldBindJSON(&updatedWork); err != nil {
+	var work Work
+	if err := c.ShouldBindJSON(&work); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updatedWork.ID = id
-
-	if err := h.repo.UpdateWork(&updatedWork); err != nil {
+	if err := h.repo.UpdateWork(&work); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, updatedWork)
+	c.JSON(http.StatusOK, work)
 }
 
 func (h *handler) DeleteWork(c *gin.Context) {
-	idParam := c.Param("id")
-	id, err := primitive.ObjectIDFromHex(idParam)
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
-	if err := h.repo.DeleteWork(id); err != nil {
+	if err := h.repo.DeleteWork(uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
